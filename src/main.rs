@@ -3,7 +3,7 @@ mod config;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::{path::PathBuf, process, time::Duration};
+use std::{num::NonZeroU64, path::PathBuf, process, time::Duration};
 
 #[derive(Parser)]
 #[command(name = "tunnelcheck", about = "Check services behind your tunnel")]
@@ -18,7 +18,7 @@ struct Cli {
 
     /// Rerun every N seconds
     #[arg(long, value_name = "SECS")]
-    watch: Option<u64>,
+    watch: Option<NonZeroU64>,
 }
 
 fn main() -> Result<()> {
@@ -54,7 +54,7 @@ fn main() -> Result<()> {
         }
 
         if let Some(secs) = cli.watch {
-            std::thread::sleep(Duration::from_secs(secs));
+            std::thread::sleep(Duration::from_secs(secs.get()));
             continue;
         }
 
