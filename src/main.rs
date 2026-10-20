@@ -71,11 +71,20 @@ fn main() -> Result<()> {
         let mut any_fail = false;
 
         println!("{:<w$} {:<6} {:>8}  {}", "NAME", "STATUS", "TIME", "DETAIL");
-        for (i, t) in targets.iter().enumerate() {
-            if next_due[i] > now {
-                continue;
-            }
-            let r = check::check(t, cfg.timeout_ms, cfg.retries);
+        let due: Vec<usize> = (0..targets.len()).filter(|&i| next_due[i] <= now).collect();
+        let results: Vec<_> = std::thread::scope(|s| {
+            let handles: Vec<_> = due
+                .iter()
+                .map(|&i| {
+                    let (t, cfg) = (&targets[i], &cfg);
+                    s.spawn(move || check::check(t, cfg.timeout_ms, cfg.retries))
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+
+        for (&i, r) in due.iter().zip(results) {
+            let t = &targets[i];
             println!(
                 "{:<w$} {:<6} {:>6}ms  {}",
                 r.name,
