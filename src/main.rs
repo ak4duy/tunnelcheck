@@ -63,9 +63,14 @@ fn main() -> Result<()> {
                 r.detail
             );
 
-            if should_alert(last_ok[i], r.ok) {
-                if let Some(url) = &cfg.webhook_url {
-                    notify::discord(url, &r);
+            if let (true, Some(url)) = (should_alert(last_ok[i], r.ok), &cfg.webhook_url) {
+                let msg = if r.ok {
+                    format!("🟢 **{}** is back UP ({}ms)", r.name, r.elapsed.as_millis())
+                } else {
+                    format!("🔴 **{}** is DOWN: {}", r.name, r.detail)
+                };
+                if let Err(e) = notify::discord(url, &msg) {
+                    eprintln!("webhook failed for {}: {e}", r.name);
                 }
             }
             last_ok[i] = Some(r.ok);
@@ -92,9 +97,11 @@ fn main() -> Result<()> {
     }
 }
 
-/// Alert on the first failure only, not on every failed check while down.
 fn should_alert(prev_ok: Option<bool>, ok: bool) -> bool {
-    !ok && prev_ok != Some(false)
+    match prev_ok {
+        None => !ok,
+        Some(prev) => prev != ok,
+    }
 }
 
 #[cfg(test)]
@@ -102,11 +109,12 @@ mod tests {
     use super::should_alert;
 
     #[test]
-    fn alerts_only_on_transition_to_down() {
+    fn alerts_on_down_and_recovery_only() {
         assert!(should_alert(None, false));
+        assert!(!should_alert(None, true));
         assert!(should_alert(Some(true), false));
+        assert!(should_alert(Some(false), true));
         assert!(!should_alert(Some(false), false));
         assert!(!should_alert(Some(true), true));
-        assert!(!should_alert(Some(false), true));
     }
 }
