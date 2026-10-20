@@ -1,3 +1,4 @@
+mod cache;
 mod check;
 mod config;
 mod notify;
@@ -70,7 +71,10 @@ fn main() -> Result<()> {
         let now = Instant::now();
         let mut any_fail = false;
 
-        println!("{:<w$} {:<6} {:>8}  {}", "NAME", "STATUS", "TIME", "DETAIL");
+        println!(
+            "{:<w$}    {:<6}    {:>8}      {}",
+            "NAME", "STATUS", "TIME", "DETAIL"
+        );
         let due: Vec<usize> = (0..targets.len()).filter(|&i| next_due[i] <= now).collect();
         let results: Vec<_> = std::thread::scope(|s| {
             let handles: Vec<_> = due
@@ -86,21 +90,26 @@ fn main() -> Result<()> {
         for (&i, r) in due.iter().zip(results) {
             let t = &targets[i];
             println!(
-                "{:<w$} {:<6} {:>6}ms  {}",
+                "{:<w$}    {:<6}    {:>6}ms      {}",
                 r.name,
                 if r.ok { "OK" } else { "FAIL" },
                 r.elapsed.as_millis(),
                 r.detail
             );
 
-            if let (true, Some(url)) = (should_alert(last_ok[i], r.ok), &cfg.webhook_url) {
+            if should_alert(last_ok[i], r.ok) {
                 let msg = if r.ok {
                     format!("🟢 **{}** is back UP ({}ms)", r.name, r.elapsed.as_millis())
                 } else {
                     format!("🔴 **{}** is DOWN: {}", r.name, r.detail)
                 };
-                if let Err(e) = notify::discord(url, &msg) {
-                    eprintln!("webhook failed for {}: {e}", r.name);
+                if let Err(e) = cache::cache_state(&r.name, r.ok, &msg) {
+                    eprintln!("cache write failed for {}: {e}", r.name);
+                }
+                if let Some(url) = &cfg.webhook_url {
+                    if let Err(e) = notify::discord(url, &msg) {
+                        eprintln!("webhook failed for {}: {e}", r.name);
+                    }
                 }
             }
             last_ok[i] = Some(r.ok);
