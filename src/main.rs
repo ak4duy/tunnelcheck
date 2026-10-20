@@ -42,6 +42,13 @@ fn main() -> Result<()> {
         .cloned()
         .collect();
 
+    let w = targets
+        .iter()
+        .map(|t| t.name.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max(4);
+
     let mut next_due = vec![Instant::now(); targets.len()];
     let mut last_ok: Vec<Option<bool>> = vec![None; targets.len()];
 
@@ -49,14 +56,14 @@ fn main() -> Result<()> {
         let now = Instant::now();
         let mut any_fail = false;
 
-        println!("{:<14} {:<6} {:>8}  {}", "NAME", "STATUS", "TIME", "DETAIL");
+        println!("{:<w$} {:<6} {:>8}  {}", "NAME", "STATUS", "TIME", "DETAIL");
         for (i, t) in targets.iter().enumerate() {
             if next_due[i] > now {
                 continue;
             }
             let r = check::check(t, cfg.timeout_ms, cfg.retries);
             println!(
-                "{:<14} {:<6} {:>6}ms  {}",
+                "{:<w$} {:<6} {:>6}ms  {}",
                 r.name,
                 if r.ok { "OK" } else { "FAIL" },
                 r.elapsed.as_millis(),
