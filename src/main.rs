@@ -25,6 +25,10 @@ struct Cli {
     /// Rerun every N seconds (targets can override with interval_secs)
     #[arg(long, value_name = "SECS")]
     watch: Option<NonZeroU64>,
+
+    /// Send a test message to the webhook and exit
+    #[arg(long)]
+    test_webhook: bool,
 }
 
 fn main() -> Result<()> {
@@ -34,6 +38,16 @@ fn main() -> Result<()> {
     let text =
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     let cfg: config::Config = toml::from_str(&text).context("parsing config")?;
+
+    if cli.test_webhook {
+        let url = cfg
+            .webhook_url
+            .as_deref()
+            .context("no webhook_url in config")?;
+        notify::discord(url, "✅ tunnelcheck webhook test").context("sending test message")?;
+        println!("test message sent");
+        return Ok(());
+    }
 
     let targets: Vec<_> = cfg
         .targets
