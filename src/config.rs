@@ -5,6 +5,9 @@ use std::{num::NonZeroU64, path::PathBuf};
 pub struct Config {
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
+    /// Retries
+    #[serde(default = "default_retries")]
+    pub retries: u64,
     /// Discord webhook to POST to when a target goes down
     pub webhook_url: Option<String>,
     #[serde(default, rename = "target")]
@@ -18,12 +21,17 @@ pub struct Target {
     #[serde(default = "default_status")]
     pub expect_status: u16,
     pub timeout_ms: Option<u64>,
+    pub retries: Option<u64>,
     /// Overrides the --watch interval for this target
     pub interval_secs: Option<NonZeroU64>,
 }
 
 pub fn default_timeout() -> u64 {
     5000
+}
+
+pub fn default_retries() -> u64 {
+    0
 }
 
 pub fn default_status() -> u16 {

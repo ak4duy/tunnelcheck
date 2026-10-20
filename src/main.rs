@@ -4,7 +4,12 @@ mod notify;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::{num::NonZeroU64, path::PathBuf, process, time::{Duration, Instant}};
+use std::{
+    num::NonZeroU64,
+    path::PathBuf,
+    process,
+    time::{Duration, Instant},
+};
 
 #[derive(Parser)]
 #[command(name = "tunnelcheck", about = "Check services behind your tunnel")]
@@ -26,8 +31,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let path = cli.config.clone().unwrap_or_else(config::default_path);
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     let cfg: config::Config = toml::from_str(&text).context("parsing config")?;
 
     let targets: Vec<_> = cfg
@@ -49,7 +54,7 @@ fn main() -> Result<()> {
             if next_due[i] > now {
                 continue;
             }
-            let r = check::check(t, cfg.timeout_ms);
+            let r = check::check(t, cfg.timeout_ms, cfg.retries);
             println!(
                 "{:<14} {:<6} {:>6}ms  {}",
                 r.name,
