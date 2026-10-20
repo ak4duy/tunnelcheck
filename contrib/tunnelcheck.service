@@ -1,0 +1,12 @@
+[Unit]
+Description=tunnelcheck uptime monitor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=%h/.cargo/bin/tunnelcheck --watch 300
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
