@@ -8,20 +8,20 @@ pub struct Outcome {
     pub elapsed: Duration,
 }
 
-pub fn check(t: &Target, default_timeout_ms: u64, default_retries: u64) -> Outcome {
+pub fn check(t: &Target, default_timeout_secs: u64, default_retries: u64) -> Outcome {
     let retries = t.retries.unwrap_or(default_retries);
-    let mut outcome = attempt(t, default_timeout_ms);
+    let mut outcome = attempt(t, default_timeout_secs);
     for _ in 0..retries {
         if outcome.ok {
             break;
         }
-        outcome = attempt(t, default_timeout_ms);
+        outcome = attempt(t, default_timeout_secs);
     }
     outcome
 }
 
-fn attempt(t: &Target, default_timeout_ms: u64) -> Outcome {
-    let timeout = Duration::from_millis(t.timeout_ms.unwrap_or(default_timeout_ms));
+fn attempt(t: &Target, default_timeout_secs: u64) -> Outcome {
+    let timeout = Duration::from_secs(t.timeout_secs.unwrap_or(default_timeout_secs));
     let start = Instant::now();
 
     let client = match reqwest::blocking::Client::builder()

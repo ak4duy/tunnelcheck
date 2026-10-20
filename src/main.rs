@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     let targets: Vec<_> = cfg
         .targets
         .iter()
-        .filter(|t| cli.only.as_ref().map_or(true, |n| *n == t.name))
+        .filter(|t| cli.only.as_ref().is_none_or(|n| *n == t.name))
         .cloned()
         .collect();
 
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
                 .iter()
                 .map(|&i| {
                     let (t, cfg) = (&targets[i], &cfg);
-                    s.spawn(move || check::check(t, cfg.timeout_ms, cfg.retries))
+                    s.spawn(move || check::check(t, cfg.timeout_secs, cfg.retries))
                 })
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()
