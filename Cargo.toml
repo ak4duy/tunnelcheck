@@ -2,6 +2,12 @@
 name = "tunnelcheck"
 version = "0.1.0"
 edition = "2024"
+description = "A small command-line uptime monitor configured with one TOML file"
+license = "MIT"
+repository = "https://github.com/ak4duy/tunnelcheck"
+readme = "README.md"
+keywords = ["uptime", "monitoring", "healthcheck", "cli"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1"
