@@ -136,7 +136,27 @@ pub fn cache_state(name: &str, ok: bool, msg: &str) -> std::io::Result<()> {
     )
 }
 
-// shortcut: checks.json grows forever (~100KB/target/month at 5min), add rotation if that matters
+pub fn prune_checks(max_age_secs: u64) -> std::io::Result<()> {
+    let path = cache_path("checks.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    let cutoff = now_secs().saturating_sub(max_age_secs);
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|l| serde_json::from_str::<Check>(l).is_ok_and(|c| c.ts >= cutoff))
+        .collect();
+    if kept.len() == text.lines().count() {
+        return Ok(());
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(
+        &tmp,
+        kept.iter().map(|l| format!("{l}\n")).collect::<String>(),
+    )?;
+    std::fs::rename(tmp, path)
+}
+
 pub fn record_check(name: &str, ok: bool, ms: u64) -> std::io::Result<()> {
     append(
         "checks.json",

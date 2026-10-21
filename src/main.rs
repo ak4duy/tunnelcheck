@@ -97,6 +97,9 @@ fn main() -> Result<()> {
         .max(4);
 
     let mut next_due = vec![Instant::now(); targets.len()];
+    if let Err(e) = cache::prune_checks(30 * 86400) {
+        eprintln!("pruning check history failed: {e}");
+    }
     let known = cache::last_states();
     let mut last_ok: Vec<Option<bool>> = targets
         .iter()
