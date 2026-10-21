@@ -9,7 +9,7 @@ use std::{
     num::NonZeroU64,
     path::PathBuf,
     process,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Parser)]
@@ -45,7 +45,13 @@ fn main() -> Result<()> {
             .webhook_url
             .as_deref()
             .context("no webhook_url in config")?;
-        notify::discord(url, "✅ tunnelcheck webhook test").context("sending test message")?;
+        notify::discord(
+            url,
+            "✅ tunnelcheck webhook test",
+            0x2ECC71,
+            &[("Status", "webhook is working")],
+        )
+        .context("sending test message")?;
         println!("test message sent");
         return Ok(());
     }
@@ -98,16 +104,31 @@ fn main() -> Result<()> {
             );
 
             if should_alert(last_ok[i], r.ok) {
-                let msg = if r.ok {
-                    format!("🟢 **{}** is back UP ({}ms)", r.name, r.elapsed.as_millis())
+                let color: u32 = if r.ok { 0x2ECC71 } else { 0xE74C3C };
+                let title = if r.ok {
+                    format!("🟢 {} is back up", r.name)
                 } else {
-                    format!("🔴 **{}** is DOWN: {}", r.name, r.detail)
+                    format!("🔴 {} is down", r.name)
                 };
-                if let Err(e) = cache::cache_state(&r.name, r.ok, &msg) {
+                let unix_secs = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                let when = format!("<t:{unix_secs}:f>");
+                let (label, outcome) = if r.ok {
+                    ("Latency", format!("{} ms", r.elapsed.as_millis()))
+                } else {
+                    ("Error", r.detail.clone())
+                };
+                if let Err(e) = cache::cache_state(&r.name, r.ok, &format!("{title}: {outcome}")) {
                     eprintln!("cache write failed for {}: {e}", r.name);
                 }
                 if let Some(url) = &cfg.webhook_url {
-                    if let Err(e) = notify::discord(url, &msg) {
+                    let fields = [
+                        ("Target", t.url.as_str()),
+                        ("Time", &when),
+                        (label, &outcome),
+                    ];
+                    if let Err(e) = notify::discord(url, &title, color, &fields) {
                         eprintln!("webhook failed for {}: {e}", r.name);
                     }
                 }
@@ -137,10 +158,7 @@ fn main() -> Result<()> {
 }
 
 fn should_alert(prev_ok: Option<bool>, ok: bool) -> bool {
-    match prev_ok {
-        None => !ok,
-        Some(prev) => prev != ok,
-    }
+    prev_ok.unwrap_or(true) != ok
 }
 
 #[cfg(test)]
