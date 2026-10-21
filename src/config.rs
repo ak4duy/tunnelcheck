@@ -17,11 +17,14 @@ pub struct Config {
 #[derive(Deserialize, Clone)]
 pub struct Target {
     pub name: String,
+    /// http(s)://... or tcp://host:port
     pub url: String,
     #[serde(default = "default_status")]
     pub expect_status: u16,
     pub timeout_secs: Option<u64>,
     pub retries: Option<u64>,
+    /// HTTP body must contain this text
+    pub keyword: Option<String>,
     /// Overrides the --watch interval for this target
     pub interval_secs: Option<NonZeroU64>,
 }

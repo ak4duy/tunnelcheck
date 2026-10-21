@@ -34,6 +34,10 @@ struct Cli {
     /// Browse recorded up/down history (newest first), filtered by --only
     #[arg(long)]
     history: bool,
+
+    /// Show the uptime dashboard from recorded checks (refreshes with --watch)
+    #[arg(long)]
+    status: bool,
 }
 
 fn main() -> Result<()> {
@@ -70,6 +74,20 @@ fn main() -> Result<()> {
         .filter(|t| cli.only.as_ref().is_none_or(|n| *n == t.name))
         .cloned()
         .collect();
+
+    if cli.status {
+        let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+        loop {
+            if cli.watch.is_some() {
+                print!("\x1b[2J\x1b[H");
+            }
+            cache::show_status(&names)?;
+            let Some(secs) = cli.watch else {
+                return Ok(());
+            };
+            std::thread::sleep(Duration::from_secs(secs.get()));
+        }
+    }
 
     let w = targets
         .iter()
@@ -110,6 +128,9 @@ fn main() -> Result<()> {
                 r.elapsed.as_millis(),
                 r.detail
             );
+            if let Err(e) = cache::record_check(&r.name, r.ok, r.elapsed.as_millis() as u64) {
+                eprintln!("cache write failed for {}: {e}", r.name);
+            }
 
             if should_alert(last_ok[i], r.ok) {
                 let color: u32 = if r.ok { 0x2ECC71 } else { 0xE74C3C };

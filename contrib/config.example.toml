@@ -1,0 +1,17 @@
+timeout_secs = 5
+retries = 1
+# webhook_url = "https://discord.com/api/webhooks/..."
+
+[[target]]
+name = "website"
+url = "https://example.com"
+
+[[target]]
+name = "api-health"
+url = "https://example.com/health"
+keyword = "ok"
+interval_secs = 60
+
+[[target]]
+name = "ssh"
+url = "tcp://example.com:22"
