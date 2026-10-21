@@ -52,6 +52,12 @@ fn main() -> Result<()> {
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     let cfg: config::Config = toml::from_str(&text).context("parsing config")?;
 
+    let message = cfg.mention_message.as_deref().unwrap_or_default();
+    let mention = cfg
+        .mention
+        .as_deref()
+        .map(|id| notify::mention(id, message));
+
     if cli.test_webhook {
         let url = cfg
             .webhook_url
@@ -59,6 +65,7 @@ fn main() -> Result<()> {
             .context("no webhook_url in config")?;
         notify::discord(
             url,
+            mention.as_deref(),
             "✅ tunnelcheck webhook test",
             0x2ECC71,
             &[("Status", "webhook is working")],
@@ -163,10 +170,11 @@ fn main() -> Result<()> {
                 if let Some(url) = &cfg.webhook_url {
                     let fields = [
                         ("Target", t.url.as_str()),
-                        ("Time", &when),
                         (label, &outcome),
+                        ("Time", &when),
                     ];
-                    if let Err(e) = notify::discord(url, &title, color, &fields) {
+                    if let Err(e) = notify::discord(url, mention.as_deref(), &title, color, &fields)
+                    {
                         eprintln!("webhook failed for {}: {e}", r.name);
                     }
                 }

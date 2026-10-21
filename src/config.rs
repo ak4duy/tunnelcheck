@@ -13,6 +13,10 @@ pub struct Config {
     pub cert_warn_days: i64,
     /// Discord webhook to POST to when a target goes down
     pub webhook_url: Option<String>,
+    /// Discord ID for mention
+    pub mention: Option<String>,
+    /// Custom message for mention
+    pub mention_message: Option<String>,
     #[serde(default, rename = "target")]
     pub targets: Vec<Target>,
 }
