@@ -30,10 +30,18 @@ struct Cli {
     /// Send a test message to the webhook and exit
     #[arg(long)]
     test_webhook: bool,
+
+    /// Browse recorded up/down history (newest first), filtered by --only
+    #[arg(long)]
+    history: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if cli.history {
+        return cache::show_history(cli.only.as_deref(), 20);
+    }
 
     let path = cli.config.clone().unwrap_or_else(config::default_path);
     let text =
