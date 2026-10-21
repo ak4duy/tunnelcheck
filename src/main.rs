@@ -120,7 +120,9 @@ fn main() -> Result<()> {
                 .iter()
                 .map(|&i| {
                     let (t, cfg) = (&targets[i], &cfg);
-                    s.spawn(move || check::check(t, cfg.timeout_secs, cfg.retries))
+                    s.spawn(move || {
+                        check::check(t, cfg.timeout_secs, cfg.retries, cfg.cert_warn_days)
+                    })
                 })
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()

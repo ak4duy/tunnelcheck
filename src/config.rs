@@ -8,6 +8,9 @@ pub struct Config {
     /// Retries
     #[serde(default = "default_retries")]
     pub retries: u64,
+    /// Fail HTTPS checks whose certificate expires within this many days (0 disables)
+    #[serde(default = "default_cert_warn_days")]
+    pub cert_warn_days: i64,
     /// Discord webhook to POST to when a target goes down
     pub webhook_url: Option<String>,
     #[serde(default, rename = "target")]
@@ -35,6 +38,10 @@ pub fn default_timeout() -> u64 {
 
 pub fn default_retries() -> u64 {
     0
+}
+
+pub fn default_cert_warn_days() -> i64 {
+    7
 }
 
 pub fn default_status() -> u16 {

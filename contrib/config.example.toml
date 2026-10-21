@@ -1,5 +1,6 @@
 timeout_secs = 5
 retries = 1
+cert_warn_days = 7
 # webhook_url = "https://discord.com/api/webhooks/..."
 
 [[target]]

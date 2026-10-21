@@ -2,8 +2,9 @@ use crate::config::Target;
 use std::{
     io::ErrorKind,
     net::{TcpStream, ToSocketAddrs},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 pub struct Outcome {
     pub name: String,
@@ -12,19 +13,34 @@ pub struct Outcome {
     pub elapsed: Duration,
 }
 
-pub fn check(t: &Target, default_timeout_secs: u64, default_retries: u64) -> Outcome {
+pub fn check(
+    t: &Target,
+    default_timeout_secs: u64,
+    default_retries: u64,
+    cert_warn_days: i64,
+) -> Outcome {
     let retries = t.retries.unwrap_or(default_retries);
-    let mut outcome = attempt(t, default_timeout_secs);
+    let mut outcome = attempt(t, default_timeout_secs, cert_warn_days);
     for _ in 0..retries {
         if outcome.ok {
             break;
         }
-        outcome = attempt(t, default_timeout_secs);
+        outcome = attempt(t, default_timeout_secs, cert_warn_days);
     }
     outcome
 }
 
-fn attempt(t: &Target, default_timeout_secs: u64) -> Outcome {
+fn cert_days_left(resp: &reqwest::blocking::Response) -> Option<i64> {
+    let der = resp
+        .extensions()
+        .get::<reqwest::tls::TlsInfo>()?
+        .peer_certificate()?;
+    let (_, cert) = X509Certificate::from_der(der).ok()?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
+    Some((cert.validity().not_after.timestamp() - now) / 86400)
+}
+
+fn attempt(t: &Target, default_timeout_secs: u64, cert_warn_days: i64) -> Outcome {
     let timeout = Duration::from_secs(t.timeout_secs.unwrap_or(default_timeout_secs));
     let start = Instant::now();
 
@@ -42,6 +58,7 @@ fn attempt(t: &Target, default_timeout_secs: u64) -> Outcome {
 
     let client = match reqwest::blocking::Client::builder()
         .timeout(timeout)
+        .tls_info(true)
         .build()
     {
         Ok(c) => c,
@@ -50,7 +67,13 @@ fn attempt(t: &Target, default_timeout_secs: u64) -> Outcome {
 
     match client.get(&t.url).send() {
         Ok(resp) if resp.status().as_u16() == t.expect_status => {
-            let status = resp.status().to_string();
+            let mut status = resp.status().to_string();
+            if let Some(days) = cert_days_left(&resp) {
+                if days < cert_warn_days {
+                    return fail(t, format!("certificate expires in {days}d"), start);
+                }
+                status = format!("{status}, cert {days}d");
+            }
             match &t.keyword {
                 None => pass(t, status, start),
                 Some(k) => match resp.text() {
