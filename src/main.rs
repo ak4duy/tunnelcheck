@@ -97,7 +97,11 @@ fn main() -> Result<()> {
         .max(4);
 
     let mut next_due = vec![Instant::now(); targets.len()];
-    let mut last_ok: Vec<Option<bool>> = vec![None; targets.len()];
+    let known = cache::last_states();
+    let mut last_ok: Vec<Option<bool>> = targets
+        .iter()
+        .map(|t| known.get(&t.name).copied())
+        .collect();
 
     loop {
         let now = Instant::now();

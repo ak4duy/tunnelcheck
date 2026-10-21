@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use std::{
+    collections::HashMap,
     fs::OpenOptions,
     io::{IsTerminal, Write},
     path::PathBuf,
@@ -112,6 +113,14 @@ pub fn show_history(only: Option<&str>, page_size: usize) -> anyhow::Result<()> 
             _ => {}
         }
     }
+}
+
+pub fn last_states() -> HashMap<String, bool> {
+    let text = std::fs::read_to_string(cache_path("events.json")).unwrap_or_default();
+    text.lines()
+        .filter_map(|l| serde_json::from_str::<Entry>(l).ok())
+        .map(|e| (e.name, e.status == "UP"))
+        .collect()
 }
 
 pub fn cache_state(name: &str, ok: bool, msg: &str) -> std::io::Result<()> {
