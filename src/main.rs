@@ -106,8 +106,8 @@ fn main() -> Result<()> {
             .max(4);
 
         println!(
-            "{:<w$}    {:<6}    {:>8}      {}",
-            "NAME", "STATUS", "TIME", "DETAIL"
+            "{:<w$}    {:<6}    {:>8}      DETAIL",
+            "NAME", "STATUS", "TIME"
         );
         let due: Vec<usize> = (0..targets.len()).filter(|&i| next_due[i] <= now).collect();
         let results: Vec<_> = std::thread::scope(|s| {
