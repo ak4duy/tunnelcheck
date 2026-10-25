@@ -41,8 +41,16 @@ fn cache_path(file: &str) -> PathBuf {
         .join(file)
 }
 
-fn append(file: &str, value: &impl Serialize) -> std::io::Result<()> {
-    let path = cache_path(file);
+fn checks_path() -> PathBuf {
+    let path = cache_path("checks.jsonl");
+    let legacy = cache_path("checks.json");
+    if !path.exists() && legacy.exists() {
+        let _ = std::fs::rename(legacy, &path);
+    }
+    path
+}
+
+fn append(path: PathBuf, value: &impl Serialize) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -126,7 +134,7 @@ pub fn last_states() -> HashMap<String, bool> {
 pub fn cache_state(name: &str, ok: bool, msg: &str) -> std::io::Result<()> {
     let status = if ok { "UP" } else { "DOWN" };
     append(
-        "events.json",
+        cache_path("events.json"),
         &Event {
             name,
             status,
@@ -137,7 +145,7 @@ pub fn cache_state(name: &str, ok: bool, msg: &str) -> std::io::Result<()> {
 }
 
 pub fn prune_checks(max_age_secs: u64) -> std::io::Result<()> {
-    let path = cache_path("checks.json");
+    let path = checks_path();
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(());
     };
@@ -149,7 +157,7 @@ pub fn prune_checks(max_age_secs: u64) -> std::io::Result<()> {
     if kept.len() == text.lines().count() {
         return Ok(());
     }
-    let tmp = path.with_extension("json.tmp");
+    let tmp = path.with_extension("jsonl.tmp");
     std::fs::write(
         &tmp,
         kept.iter().map(|l| format!("{l}\n")).collect::<String>(),
@@ -159,7 +167,7 @@ pub fn prune_checks(max_age_secs: u64) -> std::io::Result<()> {
 
 pub fn record_check(name: &str, ok: bool, ms: u64) -> std::io::Result<()> {
     append(
-        "checks.json",
+        checks_path(),
         &Check {
             name: name.to_string(),
             ok,
@@ -188,7 +196,7 @@ fn sparkline(ms: &[u64]) -> String {
 }
 
 pub fn show_status(names: &[&str]) -> anyhow::Result<()> {
-    let text = std::fs::read_to_string(cache_path("checks.json")).unwrap_or_default();
+    let text = std::fs::read_to_string(checks_path()).unwrap_or_default();
     let checks: Vec<Check> = text
         .lines()
         .filter_map(|l| serde_json::from_str(l).ok())
