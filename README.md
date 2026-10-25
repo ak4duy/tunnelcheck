@@ -80,5 +80,5 @@ It runs `tunnelcheck --watch 300` from `~/.cargo/bin`. Edits to the config file 
 
 Stored in `~/.cache/tunnelcheck/`:
 
-- `checks.json`: every check result, used by `--status`. Entries older than 30 days are removed on startup.
+- `checks.jsonl`: every check result, used by `--status`. Entries older than 30 days are removed on startup.
 - `events.json`: up/down transitions, used by `--history` and to avoid repeating alerts after a restart.
