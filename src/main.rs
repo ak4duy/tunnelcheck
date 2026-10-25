@@ -6,8 +6,9 @@ mod notify;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::{
+    collections::HashMap,
     num::NonZeroU64,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -48,15 +49,8 @@ fn main() -> Result<()> {
     }
 
     let path = cli.config.clone().unwrap_or_else(config::default_path);
-    let text =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    let cfg: config::Config = toml::from_str(&text).context("parsing config")?;
-
-    let message = cfg.mention_message.as_deref().unwrap_or_default();
-    let mention = cfg
-        .mention
-        .as_deref()
-        .map(|id| notify::mention(id, message));
+    let (mut cfg, mut targets) = load(&path, cli.only.as_deref())?;
+    let mut mention = mention_of(&cfg);
 
     if cli.test_webhook {
         let url = cfg
@@ -75,13 +69,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let targets: Vec<_> = cfg
-        .targets
-        .iter()
-        .filter(|t| cli.only.as_ref().is_none_or(|n| *n == t.name))
-        .cloned()
-        .collect();
-
     if cli.status {
         let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
         loop {
@@ -96,13 +83,6 @@ fn main() -> Result<()> {
         }
     }
 
-    let w = targets
-        .iter()
-        .map(|t| t.name.chars().count())
-        .max()
-        .unwrap_or(0)
-        .max(4);
-
     let mut next_due = vec![Instant::now(); targets.len()];
     if let Err(e) = cache::prune_checks(30 * 86400) {
         eprintln!("pruning check history failed: {e}");
@@ -113,9 +93,17 @@ fn main() -> Result<()> {
         .map(|t| known.get(&t.name).copied())
         .collect();
 
+    let mut loaded_at = modified(&path);
+
     loop {
         let now = Instant::now();
         let mut any_fail = false;
+        let w = targets
+            .iter()
+            .map(|t| t.name.chars().count())
+            .max()
+            .unwrap_or(0)
+            .max(4);
 
         println!(
             "{:<w$}    {:<6}    {:>8}      {}",
@@ -199,8 +187,60 @@ fn main() -> Result<()> {
             .min()
             .copied()
             .unwrap_or(now + Duration::from_secs(secs.get()));
-        std::thread::sleep(wake.saturating_duration_since(Instant::now()));
+        while Instant::now() < wake {
+            let left = wake.saturating_duration_since(Instant::now());
+            std::thread::sleep(left.min(Duration::from_secs(1)));
+            let seen = modified(&path);
+            if seen == loaded_at {
+                continue;
+            }
+            loaded_at = seen;
+            match load(&path, cli.only.as_deref()) {
+                Ok((new_cfg, new_targets)) => {
+                    let by_name: HashMap<_, _> = targets
+                        .iter()
+                        .zip(&last_ok)
+                        .map(|(t, ok)| (t.name.clone(), *ok))
+                        .collect();
+                    last_ok = new_targets
+                        .iter()
+                        .map(|t| by_name.get(&t.name).copied().flatten())
+                        .collect();
+                    next_due = vec![Instant::now(); new_targets.len()];
+                    mention = mention_of(&new_cfg);
+                    cfg = new_cfg;
+                    targets = new_targets;
+                    eprintln!("config reloaded");
+                    break;
+                }
+                Err(e) => eprintln!("config reload failed, keeping previous: {e:#}"),
+            }
+        }
     }
+}
+
+fn load(path: &Path, only: Option<&str>) -> Result<(config::Config, Vec<config::Target>)> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let cfg: config::Config = toml::from_str(&text).context("parsing config")?;
+    let targets = cfg
+        .targets
+        .iter()
+        .filter(|t| only.is_none_or(|n| n == t.name))
+        .cloned()
+        .collect();
+    Ok((cfg, targets))
+}
+
+fn mention_of(cfg: &config::Config) -> Option<String> {
+    let message = cfg.mention_message.as_deref().unwrap_or_default();
+    cfg.mention
+        .as_deref()
+        .map(|id| notify::mention(id, message))
+}
+
+fn modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
 fn should_alert(prev_ok: Option<bool>, ok: bool) -> bool {
