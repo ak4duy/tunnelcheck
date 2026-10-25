@@ -74,7 +74,7 @@ cp contrib/tunnelcheck.service ~/.config/systemd/user/
 systemctl --user enable --now tunnelcheck
 ```
 
-It runs `tunnelcheck --watch 300` from `~/.cargo/bin`.
+It runs `tunnelcheck --watch 300` from `~/.cargo/bin`. Edits to the config file are picked up automatically in watch mode; a config that fails to parse is ignored and the previous one stays active.
 
 ## Data
 
