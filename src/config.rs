@@ -24,7 +24,7 @@ pub struct Config {
 #[derive(Deserialize, Clone)]
 pub struct Target {
     pub name: String,
-    /// http(s)://... or tcp://host:port
+    /// http(s)://..., tcp://host:port, icmp://host or dns://name
     pub url: String,
     #[serde(default = "default_status")]
     pub expect_status: u16,

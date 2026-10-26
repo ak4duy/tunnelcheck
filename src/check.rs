@@ -2,6 +2,8 @@ use crate::config::Target;
 use std::{
     io::ErrorKind,
     net::{TcpStream, ToSocketAddrs},
+    process::Command,
+    sync::mpsc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -56,6 +58,35 @@ fn attempt(t: &Target, default_timeout_secs: u64, cert_warn_days: i64) -> Outcom
         };
     }
 
+    if let Some(host) = t.url.strip_prefix("icmp://") {
+        let secs = timeout.as_secs().max(1).to_string();
+        return match Command::new("ping")
+            .args(["-n", "-c", "1", "-W", &secs, "--", host])
+            .output()
+        {
+            Ok(o) if o.status.success() => pass(t, "reply".into(), start),
+            Ok(o) => match String::from_utf8_lossy(&o.stderr).trim() {
+                "" => fail(t, "no reply".into(), start),
+                err => fail(t, err.to_string(), start),
+            },
+            Err(e) => fail(t, format!("ping: {e}"), start),
+        };
+    }
+
+    if let Some(name) = t.url.strip_prefix("dns://") {
+        let (tx, rx) = mpsc::channel();
+        let host = name.to_string();
+        std::thread::spawn(move || {
+            let _ = tx.send((host.as_str(), 0).to_socket_addrs().map(|mut a| a.next()));
+        });
+        return match rx.recv_timeout(timeout) {
+            Ok(Ok(Some(sa))) => pass(t, sa.ip().to_string(), start),
+            Ok(Ok(None)) => fail(t, format!("resolve: no address for {name}"), start),
+            Ok(Err(e)) => fail(t, format!("resolve: {e}"), start),
+            Err(_) => fail(t, "timeout".into(), start),
+        };
+    }
+
     let client = match reqwest::blocking::Client::builder()
         .timeout(timeout)
         .tls_info(true)
@@ -104,5 +135,33 @@ fn fail(t: &Target, detail: String, start: Instant) -> Outcome {
         ok: false,
         detail,
         elapsed: start.elapsed(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target(url: &str) -> Target {
+        Target {
+            name: "t".into(),
+            url: url.into(),
+            expect_status: 200,
+            timeout_secs: None,
+            retries: None,
+            keyword: None,
+            interval_secs: None,
+        }
+    }
+
+    #[test]
+    fn dns_resolves_localhost() {
+        let o = attempt(&target("dns://localhost"), 5, 0);
+        assert!(o.ok, "{}", o.detail);
+    }
+
+    #[test]
+    fn dns_fails_on_unknown_name() {
+        assert!(!attempt(&target("dns://does-not-exist.invalid"), 5, 0).ok);
     }
 }

@@ -4,6 +4,8 @@ A small uptime monitor for the command line, configured with one TOML file. Thin
 
 - HTTP(S) checks with expected status code and optional keyword match
 - TCP port checks (`tcp://host:port`)
+- Ping checks (`icmp://host`, uses the system `ping`)
+- DNS resolution checks (`dns://name`)
 - TLS certificate expiry warnings
 - Discord alerts when a target goes down or comes back up
 - Terminal dashboard with heartbeat bar, 24h/30d uptime and latency sparkline
@@ -41,6 +43,14 @@ retries = 2           # overrides the global retries
 [[target]]
 name = "ssh"
 url = "tcp://example.com:22"
+
+[[target]]
+name = "gateway"
+url = "icmp://192.168.1.1"
+
+[[target]]
+name = "dns"
+url = "dns://example.com"
 ```
 
 ## Usage
