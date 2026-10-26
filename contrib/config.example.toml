@@ -2,6 +2,9 @@ timeout_secs = 5
 retries = 1
 cert_warn_days = 7
 # webhook_url = "https://discord.com/api/webhooks/..."
+# failures_before_alert = 3
+# remind_every_secs = 3600
+# quiet_hours = "23:00-07:00"
 
 [[target]]
 name = "website"

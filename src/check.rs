@@ -151,6 +151,9 @@ mod tests {
             retries: None,
             keyword: None,
             interval_secs: None,
+            failures_before_alert: None,
+            remind_every_secs: None,
+            quiet_hours: None,
         }
     }
 
