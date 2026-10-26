@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::{num::NonZeroU64, path::PathBuf};
+use std::{collections::HashSet, num::NonZeroU64, path::PathBuf};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -109,9 +109,29 @@ pub fn default_path() -> PathBuf {
         .join("tunnelcheck/config.toml")
 }
 
+pub fn problems(text: &str) -> anyhow::Result<Vec<String>> {
+    let mut found = Vec::new();
+    let cfg: Config = serde_ignored::deserialize(toml::Deserializer::new(text), |path| {
+        found.push(format!("unknown key: {path}"))
+    })?;
+    let mut seen = HashSet::new();
+    for t in &cfg.targets {
+        if !seen.insert(t.name.as_str()) {
+            found.push(format!("duplicate target name: {}", t.name));
+        }
+        if !["http://", "https://", "tcp://", "icmp://", "dns://"]
+            .iter()
+            .any(|s| t.url.starts_with(s))
+        {
+            found.push(format!("{}: unsupported url {:?}", t.name, t.url));
+        }
+    }
+    Ok(found)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::QuietHours;
+    use super::{QuietHours, problems};
 
     #[test]
     fn quiet_hours_parse_and_wrap_midnight() {
@@ -124,5 +144,34 @@ mod tests {
         assert!(day.contains(9 * 60) && !day.contains(17 * 60));
         assert!(QuietHours::try_from("25:00-07:00".to_string()).is_err());
         assert!(QuietHours::try_from("nope".to_string()).is_err());
+    }
+
+    #[test]
+    fn reports_typos_and_duplicates() {
+        let text = r#"
+            timout_secs = 5
+            [[target]]
+            name = "a"
+            url = "https://a"
+            expect_staus = 200
+            [[target]]
+            name = "a"
+            url = "htps://b"
+        "#;
+        assert_eq!(
+            problems(text).unwrap(),
+            [
+                "unknown key: timout_secs",
+                "unknown key: target.0.expect_staus",
+                "duplicate target name: a",
+                "a: unsupported url \"htps://b\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn clean_config_has_no_problems() {
+        let text = "[[target]]\nname = \"a\"\nurl = \"tcp://a:22\"\n";
+        assert!(problems(text).unwrap().is_empty());
     }
 }

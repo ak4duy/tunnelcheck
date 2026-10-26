@@ -69,6 +69,7 @@ tunnelcheck --status           # dashboard from recorded checks
 tunnelcheck --status --watch 10  # live dashboard, redraws every 10s
 tunnelcheck --history          # browse up/down events, newest first
 tunnelcheck --test-webhook     # send a test message to Discord
+tunnelcheck --check-config     # report unknown keys, duplicate names, bad URLs; exit 1 if any
 ```
 
 `--status` only reads the recorded history and runs no checks. It is meant to be used alongside a running `--watch` process:

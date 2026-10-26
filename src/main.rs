@@ -39,6 +39,10 @@ struct Cli {
     /// Show the uptime dashboard from recorded checks (refreshes with --watch)
     #[arg(long)]
     status: bool,
+
+    /// Validate the config (unknown keys, duplicate names, bad URLs) and exit
+    #[arg(long)]
+    check_config: bool,
 }
 
 fn main() -> Result<()> {
@@ -49,6 +53,20 @@ fn main() -> Result<()> {
     }
 
     let path = cli.config.clone().unwrap_or_else(config::default_path);
+
+    if cli.check_config {
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let problems = config::problems(&text).context("parsing config")?;
+        if problems.is_empty() {
+            println!("{}: OK", path.display());
+            return Ok(());
+        }
+        for p in &problems {
+            eprintln!("{p}");
+        }
+        process::exit(1);
+    }
     let (mut cfg, mut targets) = load(&path, cli.only.as_deref())?;
     let mut mention = mention_of(&cfg);
 
