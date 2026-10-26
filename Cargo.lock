@@ -1419,6 +1419,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dirs",
+ "libc",
  "reqwest",
  "serde",
  "serde_json",
