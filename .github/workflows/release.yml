@@ -11,14 +11,60 @@ jobs:
       contents: write
     concurrency:
       group: release
+    outputs:
+      tag: ${{ fromJSON(steps.release-plz.outputs.releases)[0].tag }}
+      created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5.144
+      - id: release-plz
+        uses: release-plz/action@v0.5.144
         with:
           command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  binaries:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: tunnelcheck
+          target: ${{ matrix.target }}
+          ref: refs/tags/${{ needs.release.outputs.tag }}
+          checksum: none
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  checksums:
+    needs: [release, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'tunnelcheck-*' --dir assets
+      - run: sha256sum * > SHA256SUM.txt
+        working-directory: assets
+      - run: gh release upload "$TAG" assets/SHA256SUM.txt --repo "$GITHUB_REPOSITORY" --clobber
