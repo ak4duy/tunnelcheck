@@ -52,7 +52,6 @@ jobs:
           bin: tunnelcheck
           target: ${{ matrix.target }}
           ref: refs/tags/${{ needs.release.outputs.tag }}
-          checksum: none
           token: ${{ secrets.GITHUB_TOKEN }}
 
   checksums:
@@ -64,7 +63,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ needs.release.outputs.tag }}
     steps:
-      - run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'tunnelcheck-*' --dir assets
+      - run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'tunnelcheck-*.tar.gz' --pattern 'tunnelcheck-*.zip' --dir assets
       - run: sha256sum * > SHA256SUM.txt
         working-directory: assets
       - run: gh release upload "$TAG" assets/SHA256SUM.txt --repo "$GITHUB_REPOSITORY" --clobber
