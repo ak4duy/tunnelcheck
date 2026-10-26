@@ -7,7 +7,7 @@ A small uptime monitor for the command line, configured with one TOML file. Thin
 - Ping checks (`icmp://host`, uses the system `ping`)
 - DNS resolution checks (`dns://name`)
 - TLS certificate expiry warnings
-- Discord alerts when a target goes down or comes back up
+- Discord alerts when a target goes down or comes back up, with a failure threshold, reminders and quiet hours
 - Terminal dashboard with heartbeat bar, 24h/30d uptime and latency sparkline
 - Up/down event history
 
@@ -26,6 +26,9 @@ timeout_secs = 5      # per-check timeout (default 5)
 retries = 1           # extra attempts before a check counts as failed (default 0)
 cert_warn_days = 7    # fail HTTPS checks whose cert expires sooner (default 7, 0 disables)
 webhook_url = "https://discord.com/api/webhooks/..."
+failures_before_alert = 3   # consecutive failures before a target counts as down (default 1)
+remind_every_secs = 3600    # resend the down alert while it stays down (default: never)
+quiet_hours = "23:00-07:00" # local time; down alerts wait until it ends (default: none)
 
 [[target]]
 name = "website"
@@ -39,6 +42,9 @@ keyword = "ok"        # response body must contain this
 interval_secs = 60    # overrides --watch for this target
 timeout_secs = 10     # overrides the global timeout
 retries = 2           # overrides the global retries
+failures_before_alert = 5   # overrides the global alert settings
+remind_every_secs = 600
+quiet_hours = "00:00-06:00"
 
 [[target]]
 name = "ssh"
@@ -74,6 +80,8 @@ ssh          DOWN                            ▁▁▁▁    0.00%    0.00%     
 ```
 
 Colors are used when printing to a terminal; set `NO_COLOR` to turn them off.
+
+Quiet hours hold back every Discord message. When they end, you get the alert for the target's current state: "down" if it went down and is still down, "back up" if it recovered from an outage you were alerted about. An outage that starts and ends inside quiet hours sends nothing. A "back up" message is only sent for outages that were alerted.
 
 ## Run as a service
 
