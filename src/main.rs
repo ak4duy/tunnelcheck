@@ -88,9 +88,10 @@ fn main() -> Result<()> {
         eprintln!("pruning check history failed: {e}");
     }
     let known = cache::last_states();
-    let mut last_ok: Vec<Option<bool>> = targets
+    let streaks = cache::fail_streaks();
+    let mut states: Vec<State> = targets
         .iter()
-        .map(|t| known.get(&t.name).copied())
+        .map(|t| State::restore(known.get(&t.name).copied(), streaks.get(&t.name).copied()))
         .collect();
 
     let mut loaded_at = modified(&path);
@@ -136,12 +137,29 @@ fn main() -> Result<()> {
                 eprintln!("cache write failed for {}: {e}", r.name);
             }
 
-            if should_alert(last_ok[i], r.ok) {
+            let quiet = t
+                .quiet_hours
+                .or(cfg.quiet_hours)
+                .is_some_and(|q| q.contains(local_minute_of_day()));
+            let remind = t
+                .remind_every_secs
+                .or(cfg.remind_every_secs)
+                .map(|s| Duration::from_secs(s.get()));
+            let (changed, alert) = states[i].step(
+                r.ok,
+                Instant::now(),
+                t.failures_before_alert
+                    .unwrap_or(cfg.failures_before_alert)
+                    .get(),
+                remind,
+                quiet,
+            );
+            if changed || alert.is_some() {
                 let color: u32 = if r.ok { 0x2ECC71 } else { 0xE74C3C };
-                let title = if r.ok {
-                    format!("🟢 {} is back up", r.name)
-                } else {
-                    format!("🔴 {} is down", r.name)
+                let title = match alert {
+                    Some(Alert::StillDown) => format!("🔴 {} is still down", r.name),
+                    _ if r.ok => format!("🟢 {} is back up", r.name),
+                    _ => format!("🔴 {} is down", r.name),
                 };
                 let unix_secs = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -152,10 +170,13 @@ fn main() -> Result<()> {
                 } else {
                     ("Error", r.detail.clone())
                 };
-                if let Err(e) = cache::cache_state(&r.name, r.ok, &format!("{title}: {outcome}")) {
+                if changed
+                    && let Err(e) =
+                        cache::cache_state(&r.name, r.ok, &format!("{title}: {outcome}"))
+                {
                     eprintln!("cache write failed for {}: {e}", r.name);
                 }
-                if let Some(url) = &cfg.webhook_url {
+                if let (Some(_), Some(url)) = (alert, &cfg.webhook_url) {
                     let fields = [
                         ("Target", t.url.as_str()),
                         (label, &outcome),
@@ -167,7 +188,6 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            last_ok[i] = Some(r.ok);
             any_fail |= !r.ok;
 
             if let Some(secs) = cli.watch {
@@ -199,12 +219,12 @@ fn main() -> Result<()> {
                 Ok((new_cfg, new_targets)) => {
                     let by_name: HashMap<_, _> = targets
                         .iter()
-                        .zip(&last_ok)
-                        .map(|(t, ok)| (t.name.clone(), *ok))
+                        .zip(&states)
+                        .map(|(t, s)| (t.name.clone(), *s))
                         .collect();
-                    last_ok = new_targets
+                    states = new_targets
                         .iter()
-                        .map(|t| by_name.get(&t.name).copied().flatten())
+                        .map(|t| by_name.get(&t.name).copied().unwrap_or_default())
                         .collect();
                     next_due = vec![Instant::now(); new_targets.len()];
                     mention = mention_of(&new_cfg);
@@ -243,21 +263,152 @@ fn modified(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-fn should_alert(prev_ok: Option<bool>, ok: bool) -> bool {
-    prev_ok.unwrap_or(true) != ok
+fn local_minute_of_day() -> u32 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()) as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&now, &mut tm) }.is_null() {
+        return 0;
+    }
+    (tm.tm_hour * 60 + tm.tm_min) as u32
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Alert {
+    Down,
+    StillDown,
+    Up,
+}
+
+#[derive(Clone, Copy, Default)]
+struct State {
+    down: bool,
+    fails: u64,
+    alerted_at: Option<Instant>,
+}
+
+impl State {
+    fn restore(last_ok: Option<bool>, fails: Option<u64>) -> State {
+        let down = last_ok == Some(false);
+        State {
+            down,
+            fails: fails.unwrap_or(0),
+            alerted_at: down.then(Instant::now),
+        }
+    }
+
+    fn step(
+        &mut self,
+        ok: bool,
+        now: Instant,
+        failures_before_alert: u64,
+        remind: Option<Duration>,
+        quiet: bool,
+    ) -> (bool, Option<Alert>) {
+        if ok {
+            self.fails = 0;
+            let changed = std::mem::replace(&mut self.down, false);
+            if quiet || self.alerted_at.is_none() {
+                return (changed, None);
+            }
+            self.alerted_at = None;
+            return (changed, Some(Alert::Up));
+        }
+        self.fails += 1;
+        let changed = !self.down && self.fails >= failures_before_alert;
+        self.down |= changed;
+        if !self.down || quiet {
+            return (changed, None);
+        }
+        let alert = match self.alerted_at {
+            None => Some(Alert::Down),
+            Some(at) if remind.is_some_and(|r| now.duration_since(at) >= r) => {
+                Some(Alert::StillDown)
+            }
+            _ => None,
+        };
+        if alert.is_some() {
+            self.alerted_at = Some(now);
+        }
+        (changed, alert)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::should_alert;
+    use super::{Alert, State};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn alerts_on_down_and_recovery_only() {
-        assert!(should_alert(None, false));
-        assert!(!should_alert(None, true));
-        assert!(should_alert(Some(true), false));
-        assert!(should_alert(Some(false), true));
-        assert!(!should_alert(Some(false), false));
-        assert!(!should_alert(Some(true), true));
+        let t = Instant::now();
+        let mut s = State::default();
+        assert_eq!(s.step(true, t, 1, None, false), (false, None));
+        assert_eq!(s.step(false, t, 1, None, false), (true, Some(Alert::Down)));
+        assert_eq!(s.step(false, t, 1, None, false), (false, None));
+        assert_eq!(s.step(true, t, 1, None, false), (true, Some(Alert::Up)));
+        assert_eq!(s.step(true, t, 1, None, false), (false, None));
+    }
+
+    #[test]
+    fn waits_for_consecutive_failures() {
+        let t = Instant::now();
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 3, None, false), (false, None));
+        assert_eq!(s.step(false, t, 3, None, false), (false, None));
+        assert_eq!(s.step(true, t, 3, None, false), (false, None));
+        assert_eq!(s.step(false, t, 3, None, false), (false, None));
+        assert_eq!(s.step(false, t, 3, None, false), (false, None));
+        assert_eq!(s.step(false, t, 3, None, false), (true, Some(Alert::Down)));
+    }
+
+    #[test]
+    fn reminds_while_down() {
+        let t = Instant::now();
+        let r = Some(Duration::from_secs(60));
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 1, r, false), (true, Some(Alert::Down)));
+        let later = t + Duration::from_secs(30);
+        assert_eq!(s.step(false, later, 1, r, false), (false, None));
+        let later = t + Duration::from_secs(60);
+        assert_eq!(
+            s.step(false, later, 1, r, false),
+            (false, Some(Alert::StillDown))
+        );
+    }
+
+    #[test]
+    fn quiet_hours_hold_down_alert_until_they_end() {
+        let t = Instant::now();
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 1, None, true), (true, None));
+        assert_eq!(s.step(false, t, 1, None, false), (false, Some(Alert::Down)));
+
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 1, None, true), (true, None));
+        assert_eq!(s.step(true, t, 1, None, true), (true, None));
+        assert_eq!(s.step(true, t, 1, None, false), (false, None));
+    }
+
+    #[test]
+    fn quiet_hours_hold_recovery_until_they_end() {
+        let t = Instant::now();
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 1, None, false), (true, Some(Alert::Down)));
+        assert_eq!(s.step(true, t, 1, None, true), (true, None));
+        assert_eq!(s.step(true, t, 1, None, true), (false, None));
+        assert_eq!(s.step(true, t, 1, None, false), (false, Some(Alert::Up)));
+        assert_eq!(s.step(true, t, 1, None, false), (false, None));
+    }
+
+    #[test]
+    fn flap_during_quiet_hours_sends_nothing_new() {
+        let t = Instant::now();
+        let mut s = State::default();
+        assert_eq!(s.step(false, t, 1, None, false), (true, Some(Alert::Down)));
+        assert_eq!(s.step(true, t, 1, None, true), (true, None));
+        assert_eq!(s.step(false, t, 1, None, true), (true, None));
+        assert_eq!(s.step(false, t, 1, None, false), (false, None));
     }
 }

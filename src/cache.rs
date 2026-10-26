@@ -131,6 +131,19 @@ pub fn last_states() -> HashMap<String, bool> {
         .collect()
 }
 
+pub fn fail_streaks() -> HashMap<String, u64> {
+    let text = std::fs::read_to_string(checks_path()).unwrap_or_default();
+    let mut streaks = HashMap::new();
+    for c in text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Check>(l).ok())
+    {
+        let n = streaks.entry(c.name).or_insert(0);
+        *n = if c.ok { 0 } else { *n + 1 };
+    }
+    streaks
+}
+
 pub fn cache_state(name: &str, ok: bool, msg: &str) -> std::io::Result<()> {
     let status = if ok { "UP" } else { "DOWN" };
     append(
