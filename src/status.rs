@@ -31,6 +31,8 @@ small{display:block;margin:2px 0 12px;color:var(--muted);font-size:.8em;overflow
 .axis{display:flex;align-items:center;gap:8px;margin:8px 0 6px;color:var(--muted);font-size:.8em}
 .axis hr{flex:1;margin:0;border:0;border-top:1px solid var(--line)}
 .state{margin:0;color:var(--muted);font-size:.85em}
+footer{margin:24px 0 0;color:var(--muted);font-size:.8em;text-align:center}
+footer a{color:inherit}
 .up .state{color:var(--up)}
 .down .state{color:var(--down)}
 ";
@@ -87,7 +89,26 @@ fn render(targets: &[Target], checks: &[Check], now: u64) -> String {
         ),
     };
     format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>tunnelcheck status</title>\n<style>\n{STYLE}</style>\n</head>\n<body>\n<main>\n<header><h1>Current status</h1><p>Last {BEATS} checks per target, uptime over 24h</p></header>\n{banner}\n<section class=\"grid\">\n{cards}</section>\n</main>\n</body>\n</html>\n"
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>tunnelcheck status</title>\n<style>\n{STYLE}</style>\n</head>\n<body>\n<main>\n<header><h1>Current status</h1><p>Last {BEATS} checks per target, uptime over 24h</p></header>\n{banner}\n<section class=\"grid\">\n{cards}</section>\n<footer>Generated {} by tunnelcheck v{}<br><a href=\"{}\">Source</a></footer>\n</main>\n</body>\n</html>\n",
+        utc(now),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_REPOSITORY"),
+    )
+}
+
+fn utc(secs: u64) -> String {
+    let secs = secs as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::gmtime_r(&secs, &mut tm) }.is_null() {
+        return "-".into();
+    }
+    format!(
+        "{}-{:02}-{:02} {:02}:{:02} UTC",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min
     )
 }
 
@@ -144,6 +165,7 @@ mod tests {
         assert!(html.contains("UP · 120ms · 8m ago"));
         assert!(html.contains("DOWN · - · 1m ago"));
         assert!(html.contains("1 of 2 targets down"));
+        assert!(html.contains("Generated 1970-01-02 03:46 UTC by tunnelcheck v"));
         assert!(!html.contains("<web>"));
     }
 }
