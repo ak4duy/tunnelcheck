@@ -17,14 +17,14 @@ struct Event<'a> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Check {
-    name: String,
-    ok: bool,
-    ms: u64,
-    ts: u64,
+pub struct Check {
+    pub name: String,
+    pub ok: bool,
+    pub ms: u64,
+    pub ts: u64,
 }
 
-const BEATS: usize = 30;
+pub const BEATS: usize = 30;
 
 #[derive(Deserialize)]
 struct Entry {
@@ -58,13 +58,13 @@ fn append(path: PathBuf, value: &impl Serialize) -> std::io::Result<()> {
     writeln!(f, "{}", serde_json::to_string(value)?)
 }
 
-fn now_secs() -> u64 {
+pub fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
 }
 
-fn age(secs: u64) -> String {
+pub fn age(secs: u64) -> String {
     match secs {
         0..60 => format!("{secs}s"),
         60..3600 => format!("{}m", secs / 60),
@@ -190,7 +190,7 @@ pub fn record_check(name: &str, ok: bool, ms: u64) -> std::io::Result<()> {
     )
 }
 
-fn uptime(checks: &[&Check], since: u64) -> String {
+pub fn uptime(checks: &[&Check], since: u64) -> String {
     let window: Vec<_> = checks.iter().filter(|c| c.ts >= since).collect();
     if window.is_empty() {
         return "-".into();
@@ -208,12 +208,15 @@ fn sparkline(ms: &[u64]) -> String {
         .collect()
 }
 
-pub fn show_status(names: &[&str]) -> anyhow::Result<()> {
+pub fn read_checks() -> Vec<Check> {
     let text = std::fs::read_to_string(checks_path()).unwrap_or_default();
-    let checks: Vec<Check> = text
-        .lines()
+    text.lines()
         .filter_map(|l| serde_json::from_str(l).ok())
-        .collect();
+        .collect()
+}
+
+pub fn show_status(names: &[&str]) -> anyhow::Result<()> {
+    let checks = read_checks();
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     let paint = |code: &str, s: &str| {
         if color {
