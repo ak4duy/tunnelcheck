@@ -1,6 +1,6 @@
 # tunnelcheck
 
-A small uptime monitor for the command line, configured with one TOML file. Think Uptime Kuma without the web UI.
+A small uptime monitor for the command line, configured with one TOML file. Think Uptime Kuma without the web app.
 
 - HTTP(S) checks with expected status code and optional keyword match
 - TCP port checks (`tcp://host:port`)
@@ -67,6 +67,7 @@ tunnelcheck --only website     # check one target
 tunnelcheck --watch 300        # keep checking every 300s, alert on changes
 tunnelcheck --status           # dashboard from recorded checks
 tunnelcheck --status --watch 10  # live dashboard, redraws every 10s
+tunnelcheck status --out status.html  # write a static HTML status page
 tunnelcheck --history          # browse up/down events, newest first
 tunnelcheck --test-webhook     # send a test message to Discord
 tunnelcheck --check-config     # report unknown keys, duplicate names, bad URLs; exit 1 if any
@@ -81,6 +82,10 @@ ssh          DOWN                            ▁▁▁▁    0.00%    0.00%     
 ```
 
 Colors are used when printing to a terminal; set `NO_COLOR` to turn them off.
+
+### HTML status page
+
+`tunnelcheck status --out <path>` writes a single self-contained HTML file (default `status.html`) from the recorded checks: current up/down state, 24h uptime, last latency and time since the last check for each target. It has no scripts or external assets, follows the system light/dark theme and fits phone screens, so any static file server can host it. Like `--status` it runs no checks; regenerate it periodically (for example from cron) while `--watch` is running. `--only` limits it to one target.
 
 Quiet hours hold back every Discord message. When they end, you get the alert for the target's current state: "down" if it went down and is still down, "back up" if it recovered from an outage you were alerted about. An outage that starts and ends inside quiet hours sends nothing. A "back up" message is only sent for outages that were alerted.
 
@@ -99,5 +104,5 @@ It runs `tunnelcheck --watch 300` from `~/.cargo/bin`. Edits to the config file 
 
 Stored in `~/.cache/tunnelcheck/`:
 
-- `checks.jsonl`: every check result, used by `--status`. Entries older than 30 days are removed on startup.
+- `checks.jsonl`: every check result, used by `--status` and `status`. Entries older than 30 days are removed on startup.
 - `events.json`: up/down transitions, used by `--history` and to avoid repeating alerts after a restart.

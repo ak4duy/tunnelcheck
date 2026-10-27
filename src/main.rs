@@ -2,9 +2,10 @@ mod cache;
 mod check;
 mod config;
 mod notify;
+mod status;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::{
     collections::HashMap,
     num::NonZeroU64,
@@ -43,6 +44,19 @@ struct Cli {
     /// Validate the config (unknown keys, duplicate names, bad URLs) and exit
     #[arg(long)]
     check_config: bool,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Write a static HTML status page from recorded checks
+    Status {
+        /// Path of the HTML file to write
+        #[arg(long, value_name = "PATH", default_value = "status.html")]
+        out: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -69,6 +83,12 @@ fn main() -> Result<()> {
     }
     let (mut cfg, mut targets) = load(&path, cli.only.as_deref())?;
     let mut mention = mention_of(&cfg);
+
+    if let Some(Command::Status { out }) = &cli.command {
+        status::write_page(&targets, out)?;
+        println!("wrote {}", out.display());
+        return Ok(());
+    }
 
     if cli.test_webhook {
         let url = cfg
