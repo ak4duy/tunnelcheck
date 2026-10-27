@@ -1,3 +1,20 @@
+## [0.2.2] - 2026-10-28
+
+### Features
+
+- feat(status): add footer with version, timestamp and source link e3e6576
+- feat(status): add html status page subcommand 58430b7
+
+### Refactor
+
+- refactor(cache): expose helpers for the status page 2c9beb5
+
+#### Full Changelog: https://github.com/ak4duy/tunnelcheck/compare/v0.2.0...v0.2.2
+
+### Miscellaneous
+
+- chore(ci): remove Windows latest build d205c49
+
 ## [0.2.0] - 2026-10-26
 
 ### Features
