@@ -1,3 +1,15 @@
+## [0.2.4] - 2026-10-28
+
+### Features
+
+- feat(status): show 30-day downtime history per target 89d2d12 
+
+### Refactor
+
+- refactor(test): move unit tests into tests directory ce50cbb 
+
+
+#### Full Changelog: https://github.com/ak4duy/tunnelcheck/compare/v0.2.2...v0.2.4
 ## [0.2.2] - 2026-10-28
 
 ### Features
